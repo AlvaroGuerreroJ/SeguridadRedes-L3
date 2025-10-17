@@ -1,0 +1,29 @@
+I will create the following new project files for the lab. Please add these exact file paths to the chat (by pasting each file's current contents) if you want me to edit existing versions; otherwise I will create them from scratch after you confirm this list.
+
+Files to create:
+- docker-compose.yml
+- vulnapp/Dockerfile
+- vulnapp/requirements.txt
+- vulnapp/app.py
+- vulnapp/init_db.py
+- fixedapp/Dockerfile
+- fixedapp/requirements.txt
+- fixedapp/app.py
+- fixedapp/init_db.py
+
+Planned short changes:
+1) Add two Flask apps (vulnapp on port 5000, fixedapp on port 5001) with /ping and /user endpoints.
+   - vulnapp: demonstrates command injection (subprocess.getoutput with shell interpolation) and SQL injection (SQL built via string concatenation).
+   - fixedapp: mitigations using subprocess.run([...]) with input validation and parameterized SQL queries.
+2) Add Dockerfiles and requirements for each app and a docker-compose.yml to run both services.
+3) Add init_db.py scripts to initialize a small SQLite database with example users.
+
+If you want me to proceed and create these files now, reply "create files" and I will output the SEARCH/REPLACE blocks that add each file. If you prefer to provide existing files for me to edit, add them to the chat and then say "edit files".
+
+Suggested commands to build and run once files exist:
+```bash
+docker-compose build
+```
+```bash
+docker-compose up
+```
