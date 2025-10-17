@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  fixedapp:
+    build: ./fixedapp
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"

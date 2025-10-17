@@ -1,0 +1,23 @@
+Short explanation:
+- docker-compose.vuln.yml runs only the vulnerable service (vulnapp) on localhost:5000.
+- docker-compose.fixed.yml runs only the patched service (fixedapp) on localhost:5001.
+
+Suggested commands (run from project root):
+
+```bash
+docker-compose -f docker-compose.vuln.yml build
+```
+
+```bash
+docker-compose -f docker-compose.vuln.yml up
+```
+
+To run the fixed app instead, replace vuln with fixed in the filenames above:
+
+```bash
+docker-compose -f docker-compose.fixed.yml build
+```
+
+```bash
+docker-compose -f docker-compose.fixed.yml up
+```
