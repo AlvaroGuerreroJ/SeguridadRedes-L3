@@ -10,26 +10,30 @@ app = Flask(__name__)
 handler = RotatingFileHandler("fixed.log", maxBytes=2000000, backupCount=2)
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 
-HOST_RE = re.compile(r'^[A-Za-z0-9\.\-]+$')  # simple whitelist: letters, digits, dot, dash
+HOST_RE = re.compile(
+    r"^[A-Za-z0-9\.\-]+$"
+)  # simple whitelist: letters, digits, dot, dash
+
 
 @app.before_request
 def log_request_info():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     endpoint = request.path
     params = dict(request.args)
-    ua = request.headers.get('User-Agent', '')
+    ua = request.headers.get("User-Agent", "")
     logging.info("REQ ip=%s endpoint=%s params=%s ua=%s", ip, endpoint, params, ua)
 
-@app.route('/ping')
+
+@app.route("/ping")
 def ping():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     if common.is_blocked(ip):
         logging.warning("Blocked request from %s to /ping", ip)
         return "Temporarily blocked", 403
 
-    host = request.args.get('host','127.0.0.1')
-    ua = request.headers.get('User-Agent', '')
-    suspicious, key, val = common.check_params_for_suspicious({'host': host, 'ua': ua})
+    host = request.args.get("host", "127.0.0.1")
+    ua = request.headers.get("User-Agent", "")
+    suspicious, key, val = common.check_params_for_suspicious({"host": host, "ua": ua})
     if suspicious:
         logging.warning("Suspicious token in /ping param %s=%s from=%s", key, val, ip)
         common.record_suspicious(ip, f"/ping param {key}={val}")
@@ -40,22 +44,27 @@ def ping():
         return "Invalid host", 400
     try:
         # use list form: no shell
-        proc = subprocess.run(["ping","-c","1", host], capture_output=True, text=True, timeout=5)
-        return "<pre>"+proc.stdout+proc.stderr+"</pre>"
+        proc = subprocess.run(
+            ["ping", "-c", "1", host], capture_output=True, text=True, timeout=5
+        )
+        return "<pre>" + proc.stdout + proc.stderr + "</pre>"
     except Exception as e:
         logging.exception("Ping failed: %s", e)
         return "Error", 500
 
-@app.route('/user')
+
+@app.route("/user")
 def user():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     if common.is_blocked(ip):
         logging.warning("Blocked request from %s to /user", ip)
         return "Temporarily blocked", 403
 
-    username = request.args.get('username','')
-    ua = request.headers.get('User-Agent', '')
-    suspicious, key, val = common.check_params_for_suspicious({'username': username, 'ua': ua})
+    username = request.args.get("username", "")
+    ua = request.headers.get("User-Agent", "")
+    suspicious, key, val = common.check_params_for_suspicious(
+        {"username": username, "ua": ua}
+    )
     if suspicious:
         logging.warning("Suspicious token in /user param %s=%s from=%s", key, val, ip)
         common.record_suspicious(ip, f"/user param {key}={val}")
@@ -64,7 +73,7 @@ def user():
     if not username or len(username) > 50:
         return "Invalid username", 400
     # Parameterized query to prevent SQL injection
-    conn = sqlite3.connect('users.db')
+    conn = sqlite3.connect("users.db")
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     query = "SELECT id,username,fullname FROM users WHERE username = ?"
@@ -77,6 +86,7 @@ def user():
         return "Error", 500
     finally:
         conn.close()
+
 
 if __name__ == "__main__":
     common.init_db()
