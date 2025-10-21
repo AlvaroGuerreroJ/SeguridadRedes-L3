@@ -49,6 +49,25 @@ def check_params_for_suspicious(params):
     return False, None, None
 # --- end IDS ---
 
+# --- SQL error detection / counting (per-IP) ---
+SQL_ERROR_THRESHOLD = 5      # number of SQL errors to trigger block
+SQL_ERROR_WINDOW = 60        # seconds window to count SQL errors
+
+_sql_error_hits = {}         # ip -> list of timestamps for SQL errors
+
+def record_sql_error(ip, details=""):
+    ts = _now()
+    with _lock:
+        lst = _sql_error_hits.setdefault(ip, [])
+        lst.append(ts)
+        cutoff = ts - SQL_ERROR_WINDOW
+        lst[:] = [t for t in lst if t >= cutoff]
+        if len(lst) >= SQL_ERROR_THRESHOLD:
+            _blocked[ip] = ts + BLOCK_TIME
+            logging.warning("SQL-IDS: blocking ip=%s for %d seconds; sql_error_count=%d; details=%s",
+                            ip, BLOCK_TIME, len(lst), details)
+            _sql_error_hits[ip] = []
+
 def init_db():
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
@@ -107,7 +126,9 @@ def user():
         rows = c.execute(query).fetchall()
         return jsonify([dict(id=r[0],username=r[1],fullname=r[2]) for r in rows])
     except Exception as e:
-        logging.exception("SQL error: %s", e)
+        # Log exception (stacktrace) and record a SQL error for the requesting IP.
+        logging.exception("SQL error for ip=%s query=%s: %s", ip, query, e)
+        record_sql_error(ip, f"query={query} exc={e}")
         return "Error", 500
     finally:
         conn.close()
