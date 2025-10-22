@@ -1,0 +1,260 @@
+#+title: L3
+#+author: Alvaro Guerrero Jiménez
+
+* Q3
+Regular use of endpoints.
+
+** Vulnerable
+#+begin_src 
+$ http -v localhost:5000/user username==alice
+GET /user?username=alice HTTP/1.1
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Host: localhost:5000
+User-Agent: HTTPie/3.2.4
+
+
+
+HTTP/1.1 200 OK
+Connection: close
+Content-Length: 51
+Content-Type: application/json
+Date: Tue, 21 Oct 2025 15:40:03 GMT
+Server: Werkzeug/3.1.3 Python/3.10.19
+
+[
+    {
+        "fullname": "Alice A",
+        "id": 1,
+        "username": "alice"
+    }
+]
+#+end_src
+
+** Not vulnerable
+#+begin_src 
+$ http -v localhost:5001/user username==alice
+GET /user?username=alice HTTP/1.1
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Host: localhost:5001
+User-Agent: HTTPie/3.2.4
+
+
+
+HTTP/1.1 200 OK
+Connection: close
+Content-Length: 51
+Content-Type: application/json
+Date: Tue, 21 Oct 2025 15:40:13 GMT
+Server: Werkzeug/3.1.3 Python/3.10.19
+
+[
+    {
+        "fullname": "Alice A",
+        "id": 1,
+        "username": "alice"
+    }
+]
+#+end_src
+
+* Q4
+** SQL injection
+For the vulnerable app, all users are returned.
+#+begin_src 
+$ http -v localhost:5000/user username=="' OR 1 = 1 --"
+GET /user?username=%27+OR+1+%3D+1+-- HTTP/1.1
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Host: localhost:5000
+User-Agent: HTTPie/3.2.4
+
+
+
+HTTP/1.1 200 OK
+Connection: close
+Content-Length: 96
+Content-Type: application/json
+Date: Tue, 21 Oct 2025 15:41:24 GMT
+Server: Werkzeug/3.1.3 Python/3.10.19
+
+[
+    {
+        "fullname": "Alice A",
+        "id": 1,
+        "username": "alice"
+    },
+    {
+        "fullname": "Bob B",
+        "id": 2,
+        "username": "bob"
+    }
+]
+#+end_src
+
+The fixed app interprets the username as a string properly and returns no
+outputs.
+#+begin_src 
+$ http -v localhost:5001/user username=="' OR 1 = 1 --"
+GET /user?username=%27+OR+1+%3D+1+-- HTTP/1.1
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Host: localhost:5001
+User-Agent: HTTPie/3.2.4
+
+
+
+HTTP/1.1 200 OK
+Connection: close
+Content-Length: 3
+Content-Type: application/json
+Date: Tue, 21 Oct 2025 15:41:16 GMT
+Server: Werkzeug/3.1.3 Python/3.10.19
+
+[]
+#+end_src
+
+** Command injection
+The vulnerable route allows appending arbitrary commands and shows their output.
+
+#+begin_src 
+$ http -v localhost:5000/ping host=='8.8.8.8; id'
+GET /ping?host=8.8.8.8%3B+id HTTP/1.1
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Host: localhost:5000
+User-Agent: HTTPie/3.2.4
+
+
+
+HTTP/1.1 200 OK
+Connection: close
+Content-Length: 295
+Content-Type: text/html; charset=utf-8
+Date: Tue, 21 Oct 2025 15:46:13 GMT
+Server: Werkzeug/3.1.3 Python/3.10.19
+
+<pre>PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=112 time=42.6 ms
+
+--- 8.8.8.8 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 42.627/42.627/42.627/0.000 ms
+uid=0(root) gid=0(root) groups=0(root)</pre>
+#+end_src
+
+The fixed route interprets the hostname as the host to ping, so no injection is required.
+
+#+begin_src 
+$ http -v localhost:5001/ping host=='8.8.8.8; id'
+GET /ping?host=8.8.8.8%3B+id HTTP/1.1
+Accept: */*
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Host: localhost:5001
+User-Agent: HTTPie/3.2.4
+
+
+
+HTTP/1.1 400 BAD REQUEST
+Connection: close
+Content-Length: 12
+Content-Type: text/html; charset=utf-8
+Date: Tue, 21 Oct 2025 15:46:17 GMT
+Server: Werkzeug/3.1.3 Python/3.10.19
+
+Invalid host
+#+end_src
+
+* Q7
+** SQL prepared statements/paremeterized queries
+Using parameterized queries delegates the work of preparing (and making safe)
+the query to be run on the database. This frees the developer from trying to
+properly escape and quote the user input to make an interpolation safe. ORMs are
+an abstraction layer on top of this mechanism and provide similar benefits.
+
+This is the solution implemented in the fixed app code.
+
+#+begin_src python
+query = "SELECT id,username,fullname FROM users WHERE username = ?"
+rows = c.execute(query, (username,)).fetchall()
+#+end_src
+
+** Avoid shell and use ~subprocess.run([...])~
+This passes the arguments to the command invoked explicitly and as such avoids
+manual parsing of the arguments. Avoiding shell use also is beneficial because
+shell have many many extra functionalities (e.g., =';', '&&'=) that could be
+exploited by an attacker. Passing the arguments as a list reduces the surface
+attack to the invoked command's handling of the arguments.
+
+This is also what's done in the fixed app ping route:
+
+#+begin_src python
+proc = subprocess.run(
+    ["ping", "-c", "1", host], capture_output=True, text=True, timeout=5
+)
+#+end_src
+
+** Input validation and whitelisting
+Check that the user input is of the specified types and will have the intended
+behaviour when used with the command/query. Whitelists are preferred over
+blacklists because for blacklisting to be safe it needs to be comprehensive in
+excluding all possible malicious inputs, which require knowledge of the
+behaviour of all possible outputs. In contrast, whitelisting requires knowledge
+of only some limited input set that is known safe.
+
+This is implemented in the ~/ping~ route but it's mostly redundant with the
+explicit parameter passing done in the same route (a single string as argument
+to ping) as ping would simply fail with some malformed host without more
+security implications and there likely aren't any dangerous flags that could be
+passed as the host either.
+
+#+begin_src python
+HOST_RE = re.compile(
+    r"^[A-Za-z0-9\.\-]+$"
+)
+
+if not HOST_RE.match(host) or len(host) > 100:
+    return "Invalid host", 400
+#+end_src
+
+** Least privilege
+This is running the application components with the minimal amount of privileges
+that are required to fulfil their functions. It's useful for security because it
+limits the damaga that compromised functionalities can do to the whole system.
+
+As the application is for demonstrative purposes and very small, there are no
+privilege separations (e.g., a single user SQlite database). More
+functionalities should be added for the added overhead of a privilege system to
+make sense.
+
+** Encryption and secret management
+Encryption protects against snooping actors that could see the network traffic
+(e.g., while requests are being made) or access the data at rest (e.g., the
+application database, backups). Secret management gives a structured way of
+managing secrets in the system and facilitates aging out secrets (i.e., secret
+rotation) to limit the impact of possible leaks.
+
+No such mechanisms are implemented in the application because it's too small and
+handles no secrets.
+
+** Multi factor authentication for critical operations
+Requires stronger authentitcation mechanisms for critical operations than for
+the rest of the application. As multi-factor demands more work from the user,
+limiting its use to critical operations reduces the user friction while keeping
+the stronger security guarantees.
+
+We don't have an authentication mechanism in the app, so it would take that
+first to enable multi-factor.
+
+** CAPTCHA
+Requires a human-only solvable problem to be done before enabling use of some
+functionalities. This limits the automated testing of the apps for vulnerable
+behaviour (e.g., prevent fuzzing of endpoints).
+
+We could implement it in the endpoints to limit users to human ones.

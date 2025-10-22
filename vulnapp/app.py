@@ -28,14 +28,17 @@ def ping():
 
     host = request.args.get("host", "127.0.0.1")
     ua = request.headers.get("User-Agent", "")
+
     suspicious, key, val = common.check_params_for_suspicious({"host": host, "ua": ua})
     if suspicious:
         logging.warning("Suspicious token in /ping param %s=%s from=%s", key, val, ip)
         common.record_suspicious(ip, f"/ping param {key}={val}")
 
     logging.info("PING request host=%s from=%s", host, ip)
-    # Vulnerable: shell interpolation allows command injection (kept intentionally vulnerable)
+
+    # NOTE: Vulnerable: shell interpolation allows command injection
     out = subprocess.getoutput(f"ping -c 1 {host}")
+
     return "<pre>" + out + "</pre>"
 
 
@@ -51,15 +54,18 @@ def user():
     suspicious, key, val = common.check_params_for_suspicious(
         {"username": username, "ua": ua}
     )
+
     if suspicious:
         logging.warning("Suspicious token in /user param %s=%s from=%s", key, val, ip)
         common.record_suspicious(ip, f"/user param {key}={val}")
 
     logging.info("USER request username=%s from=%s", username, ip)
-    # Vulnerable: SQL built by concatenation -> SQLi (kept intentionally vulnerable)
+
+    # NOTE: Vulnerable: Concatenated query vulnerable to SQLi
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
     query = "SELECT id,username,fullname FROM users WHERE username = '%s'" % username
+
     try:
         rows = c.execute(query).fetchall()
         return jsonify([dict(id=r[0], username=r[1], fullname=r[2]) for r in rows])

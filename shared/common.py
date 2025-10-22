@@ -42,6 +42,7 @@ def record_suspicious(ip, details=""):
         lst.append(ts)
         cutoff = ts - SUSPICIOUS_WINDOW
         lst[:] = [t for t in lst if t >= cutoff]
+
         if len(lst) >= SUSPICIOUS_THRESHOLD:
             _blocked[ip] = ts + BLOCK_TIME
             logging.warning(
@@ -64,6 +65,7 @@ def record_sql_error(ip, details=""):
         lst.append(ts)
         cutoff = ts - SQL_ERROR_WINDOW
         lst[:] = [t for t in lst if t >= cutoff]
+
         if len(lst) >= SQL_ERROR_THRESHOLD:
             _blocked[ip] = ts + BLOCK_TIME
             logging.warning(
@@ -79,14 +81,16 @@ def record_sql_error(ip, details=""):
 def init_db(db_path="users.db", seed_users=None):
     if seed_users is None:
         seed_users = [("alice", "Alice A"), ("bob", "Bob B")]
+
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.execute(
         "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, fullname TEXT)"
     )
-    # insert only if table empty
+
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
         c.executemany("INSERT INTO users(username,fullname) VALUES(?,?)", seed_users)
+
     conn.commit()
     conn.close()

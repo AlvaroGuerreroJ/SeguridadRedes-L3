@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 HOST_RE = re.compile(
     r"^[A-Za-z0-9\.\-]+$"
-)  # simple whitelist: letters, digits, dot, dash
+)
 
 
 @app.before_request
@@ -33,20 +33,24 @@ def ping():
 
     host = request.args.get("host", "127.0.0.1")
     ua = request.headers.get("User-Agent", "")
+
     suspicious, key, val = common.check_params_for_suspicious({"host": host, "ua": ua})
     if suspicious:
         logging.warning("Suspicious token in /ping param %s=%s from=%s", key, val, ip)
         common.record_suspicious(ip, f"/ping param {key}={val}")
 
     logging.info("PING request host=%s from=%s", host, ip)
-    # Validate host (whitelist) and use list args to avoid shell
+
+    # Validate host using whitelist
     if not HOST_RE.match(host) or len(host) > 100:
         return "Invalid host", 400
+
     try:
-        # use list form: no shell
+        # Use list of arguments, no injection
         proc = subprocess.run(
             ["ping", "-c", "1", host], capture_output=True, text=True, timeout=5
         )
+
         return "<pre>" + proc.stdout + proc.stderr + "</pre>"
     except Exception as e:
         logging.exception("Ping failed: %s", e)
@@ -65,6 +69,7 @@ def user():
     suspicious, key, val = common.check_params_for_suspicious(
         {"username": username, "ua": ua}
     )
+
     if suspicious:
         logging.warning("Suspicious token in /user param %s=%s from=%s", key, val, ip)
         common.record_suspicious(ip, f"/user param {key}={val}")
@@ -72,11 +77,13 @@ def user():
     logging.info("USER request username=%s from=%s", username, ip)
     if not username or len(username) > 50:
         return "Invalid username", 400
+
     # Parameterized query to prevent SQL injection
     conn = sqlite3.connect("users.db")
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     query = "SELECT id,username,fullname FROM users WHERE username = ?"
+
     try:
         rows = c.execute(query, (username,)).fetchall()
         return jsonify([dict(r) for r in rows])
